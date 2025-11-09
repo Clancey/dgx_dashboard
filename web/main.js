@@ -132,6 +132,9 @@ function initCharts() {
 						text: 'Usage %'
 					}
 				},
+				x: {
+					display: false
+				}
 			},
 			plugins: {
 				legend: {
@@ -172,6 +175,9 @@ function initCharts() {
 						display: true,
 						text: 'Temperature °C'
 					}
+				},
+				x: {
+					display: false
 				}
 			},
 			plugins: {
