@@ -5,49 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DGX Dashboard</title>
     <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="main.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" 
+            integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" 
+            crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js" 
+            integrity="sha384-3N9GHhCtN3CQef6tNfqgZlv7sQLYIkcChN+uaTZ7xVdzKYp/SjBNPxa92+hM7EAY" 
+            crossorigin="anonymous"></script>
 </head>
 <body>
-    <h1>DGX Dashboard</h1>
-    <div id="status">Connecting...</div>
-    <div id="messages"></div>
+<div class="page">
+    <h1>DGX Spark Dashboard</h1>
+    <span id="status">Connecting...</span>
 
-    <script>
-        const messagesDiv = document.getElementById('messages');
-        const statusDiv = document.getElementById('status');
-        
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-            
-            ws.onopen = () => {
-                statusDiv.textContent = 'Connected';
-                statusDiv.style.color = '#4ec9b0';
-            };
-            
-            ws.onmessage = (event) => {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = 'message';
-                messageDiv.textContent = event.data;
-                messagesDiv.appendChild(messageDiv);
-                
-                // Auto-scroll to bottom
-                window.scrollTo(0, document.body.scrollHeight);
-            };
-            
-            ws.onerror = (error) => {
-                statusDiv.textContent = 'Error';
-                statusDiv.style.color = '#f48771';
-                console.error('WebSocket error:', error);
-            };
-            
-            ws.onclose = () => {
-                statusDiv.textContent = 'Disconnected - Reconnecting...';
-                statusDiv.style.color = '#ce9178';
-                setTimeout(connect, 1000);
-            };
-        }
-        
-        connect();
-    </script>
+    <div class="graphs">
+         <div class="group full">
+            <h3>Memory Usage</h3>
+            <div class="subgraphs">
+                <div class="subgroup half">
+                    <div class="chart-container small"><canvas id="memory_gauge"></canvas></div>
+                </div>
+                <div class="subgroup half">
+                    <div class="chart-container small"><canvas id="memory_chart"></canvas></div>
+                </div>
+            </div>
+        </div>
+        <div class="group half">
+            <h3>GPU & CPU Usage</h3>
+            <div class="chart-container"><canvas id="usage_chart"></canvas></div>
+            <div id="gpu_power_label" class="power-label">GPU Power: 0 W</div>
+        </div>
+        <div class="group half">
+            <h3>GPU & CPU Temperature</h3>
+            <div class="chart-container"><canvas id="temp_chart"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<script src="main.js"></script>
 </body>
 </html>

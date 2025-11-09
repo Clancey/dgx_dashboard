@@ -1,0 +1,70 @@
+* {
+	font-family: sans-serif;
+}
+
+body {
+	margin: 0;
+}
+
+.page {
+	max-width: 1400px;
+	margin: auto;
+}
+
+h1 {
+	display: inline-block;
+}
+
+.graphs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+}
+
+.group {
+	border: 1px solid #ccc;
+	padding: 10px;
+	border-radius: 8px;
+}
+
+.group.full {
+	flex-basis: 100%;
+}
+
+.group.half {
+	flex-basis: calc(50% - 32px);
+}
+
+.subgraphs {
+	display: flex;
+}
+
+.subgroup.half {
+	flex-basis: 50%;
+}
+
+.group h3 {
+	margin: 0 0 5px;
+	text-align: center;
+}
+
+.chart-container {
+	width: 100%;
+	height: 250px;
+}
+
+.chart-container.small {
+	width: 100%;
+	height: 200px;
+}
+
+#memory_gauge {
+	max-height: 180px;
+}
+
+.power-label {
+	text-align: center;
+	font-size: 16px;
+	margin-top: 10px;
+	font-weight: bold;
+}
