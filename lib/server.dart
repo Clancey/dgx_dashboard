@@ -159,11 +159,11 @@ class Server {
           'systemTemperatureC': ev.temperature.systemTemperatureC,
         },
         'memory': {
-          'usedKb': ev.memory.usedKb,
-          'availableKb': ev.memory.availableKb,
-          'totalKb': ev.memory.totalKb,
+          'usedKB': ev.memory.usedKB,
+          'availableKB': ev.memory.availableKB,
+          'totalKB': ev.memory.totalKB,
         },
-        'nextPollSeconds': pollInternalSeconds,
+        'nextPollSeconds': pollSeconds,
       };
 
       // Send to all connected clients.

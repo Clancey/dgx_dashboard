@@ -73,7 +73,7 @@ class GpuMonitor {
       final process = _nvidiaSmiProcess = await Process.start('nvidia-smi', [
         '--query-gpu=utilization.gpu,temperature.gpu,power.draw',
         '--format=csv,noheader,nounits',
-        '-l=$pollInternalSeconds',
+        '-l=$pollSeconds',
       ]);
 
       _processOutputSubscription = process.stdout

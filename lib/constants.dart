@@ -1,2 +1,2 @@
 /// Number of seconds between each metrics poll.
-const pollInternalSeconds = 5;
+const pollSeconds = 5;

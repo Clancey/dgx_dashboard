@@ -1,7 +1,8 @@
-import 'dart:async';
+import 'dart:core';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:dgx_dashboard/constants.dart';
 import 'package:dgx_dashboard/cpu.dart';
 import 'package:dgx_dashboard/gpu.dart';
 import 'package:dgx_dashboard/memory.dart';
@@ -40,12 +41,16 @@ class MockGpuMonitor implements GpuMonitor {
   var _currentPower = 4.1;
 
   @override
-  late Stream<GpuMetrics> metrics = Stream<GpuMetrics>.periodic(
-    Duration(seconds: 5),
-    _computeNext,
-  );
+  late Stream<GpuMetrics> metrics = () async* {
+    yield _computeNext();
+    yield* Stream<GpuMetrics>.periodic(
+      Duration(seconds: pollSeconds),
+      _computeNext,
+    );
+  }();
 
-  GpuMetrics _computeNext(_) {
+  GpuMetrics _computeNext([_]) {
+    print('computing!');
     _currentPercent = (_currentPercent + (_random.nextInt(20) - 10)).clamp(
       0,
       100,
@@ -67,21 +72,18 @@ class MockGpuMonitor implements GpuMonitor {
 
 /// A mock implementation of [MemoryMonitor] that returns random values.
 class MockMemoryMonitor implements MemoryMonitor {
-  final _totalKb = 128 * 1024 * 1024;
-  var _usedKb = 5 * 1024 * 1024;
+  final _totalKB = (125513944 / 1000 * 1024).toInt();
+  var _usedKB = 5000000;
 
   @override
   MemoryMetrics readMetrics() {
     // Move up or down by up to 1GB per tick.
-    final change = _random.nextInt(2048);
-    _usedKb = (_usedKb + ((change - 1024) * 1024)).clamp(
-      5 * 1024 * 1024,
-      _totalKb,
-    );
+    final change = _random.nextInt(2 * 1000 * 1000);
+    _usedKB = (_usedKB + (change - 1000 * 1000)).clamp(5000000, _totalKB);
     return (
-      totalKb: _totalKb,
-      usedKb: _usedKb,
-      availableKb: _totalKb - _usedKb,
+      totalKB: _totalKB,
+      usedKB: _usedKB,
+      availableKB: _totalKB - _usedKB,
     );
   }
 }

@@ -92,10 +92,16 @@ function updateGauge(chart, value, maxValue) {
 		color = 'rgb(75, 192, 192)';
 	}
 
+	// Truncate so we we get 128GB when it's actually 128.5
+	maxValue = Math.trunc(maxValue);
+	if (value > maxValue) {
+		value = maxValue;
+	}
+
 	chart.data.datasets[0].data = [value, maxValue - value];
 	chart.data.datasets[0].backgroundColor = [color, 'rgb(230, 230, 230)'];
 	chart.options.plugins.annotation.annotations.usedLabel.content = `${value.toFixed(1)}GB`;
-	chart.options.plugins.annotation.annotations.totalLabel.content = `/${maxValue.toFixed(0)}GB`;
+	chart.options.plugins.annotation.annotations.totalLabel.content = `/${maxValue}GB`;
 	chart.update('none');
 }
 
@@ -188,7 +194,7 @@ function initCharts() {
 		}
 	});
 
-	memoryGauge = createGauge('memory_gauge', 'GB', 100, 60, 80);
+	memoryGauge = createGauge('memory_gauge', '/128GB', 100, 60, 80);
 
 	const memoryCtx = document.getElementById('memory_chart').getContext('2d');
 	memoryLineChart = new Chart(memoryCtx, {
@@ -248,9 +254,9 @@ function initCharts() {
 }
 
 function updateCharts(data) {
-	// Convert KiB to GB: KiB × 1024 (to bytes) ÷ 1000000000 (to GB)
-	const usedGB = (data.memory.usedKb * 1024) / 1000000000;
-	const totalGB = (data.memory.totalKb * 1024) / 1000000000;
+	// Convert KB to GB
+	const usedGB = data.memory.usedKB / 1000000;
+	const totalGB = data.memory.totalKB / 1000000;
 	const memoryUsed = parseFloat(usedGB.toFixed(1));
 
 	gpuHistory.push(data.gpu.usagePercent);
@@ -323,13 +329,9 @@ function connect() {
 	ws.onmessage = (event) => {
 		const data = JSON.parse(event.data);
 		updateCharts(data);
+
 		// Start or restart the progress bar based on the server-provided interval.
-		if (typeof data.nextPollSeconds === 'number') {
-			startProgressBar(data.nextPollSeconds);
-		} else {
-			// Default to POLL_INTERVAL_SECONDS if not provided.
-			startProgressBar(POLL_INTERVAL_SECONDS);
-		}
+		startProgressBar(data.nextPollSeconds);
 	};
 
 	ws.onerror = (error) => {

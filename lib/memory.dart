@@ -1,7 +1,7 @@
 import 'dart:io';
 
 /// Represents memory usage metrics.
-typedef MemoryMetrics = ({int totalKb, int usedKb, int availableKb});
+typedef MemoryMetrics = ({int totalKB, int usedKB, int availableKB});
 
 /// Monitors system memory usage by reading from `/proc/meminfo`.
 ///
@@ -13,24 +13,24 @@ class MemoryMonitor {
   /// Returns a [MemoryMetrics] record containing total, used, and available
   /// memory in kilobytes. Returns zeros if the data cannot be read.
   MemoryMetrics readMetrics() {
-    int? total;
-    int? available;
+    int? totalKiB;
+    int? availableKiB;
 
     for (final line in File('/proc/meminfo').readAsLinesSync()) {
-      if (total == null && line.startsWith('MemTotal:')) {
-        total = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
-      } else if (available == null && line.startsWith('MemAvailable:')) {
-        available = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
+      if (totalKiB == null && line.startsWith('MemTotal:')) {
+        totalKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
+      } else if (availableKiB == null && line.startsWith('MemAvailable:')) {
+        availableKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
       }
 
       // Exit early once we have both values
-      if (total != null && available != null) break;
+      if (totalKiB != null && availableKiB != null) break;
     }
 
-    final totalKb = total ?? 0;
-    final availableKb = available ?? 0;
-    final usedKb = (totalKb - availableKb).clamp(0, totalKb);
+    final totalKB = ((totalKiB ??= 0) / 1024 * 1000).toInt();
+    final availableKB = ((availableKiB ??= 0) / 1024 * 1000).toInt();
+    final usedKB = (totalKB - availableKB).clamp(0, totalKB);
 
-    return (totalKb: totalKb, usedKb: usedKb, availableKb: availableKb);
+    return (totalKB: totalKB, usedKB: usedKB, availableKB: availableKB);
   }
 }
