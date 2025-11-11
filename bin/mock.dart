@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:dgx_dashboard/constants.dart';
+import 'package:dgx_dashboard/conversions.dart';
 import 'package:dgx_dashboard/cpu.dart';
 import 'package:dgx_dashboard/gpu.dart';
 import 'package:dgx_dashboard/memory.dart';
@@ -72,14 +73,15 @@ class MockGpuMonitor implements GpuMonitor {
 
 /// A mock implementation of [MemoryMonitor] that returns random values.
 class MockMemoryMonitor implements MemoryMonitor {
-  final _totalKB = (125513944 / 1000 * 1024).toInt();
+  // Convert the mock total memory from bytes to decimal kilobytes.
+  final _totalKB = kibToKB(125513944);
   var _usedKB = 5000000;
 
   @override
   MemoryMetrics readMetrics() {
     // Move up or down by up to 1GB per tick.
-    final change = _random.nextInt(2 * 1000 * 1000);
-    _usedKB = (_usedKB + (change - 1000 * 1000)).clamp(5000000, _totalKB);
+    final changeKB = _random.nextInt(2 * 1000000); // 2 GB range
+    _usedKB = (_usedKB + (changeKB - 1000000)).clamp(5000000, _totalKB);
     return (
       totalKB: _totalKB,
       usedKB: _usedKB,

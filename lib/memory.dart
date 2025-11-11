@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'conversions.dart';
+
 /// Represents memory usage metrics.
 typedef MemoryMetrics = ({int totalKB, int usedKB, int availableKB});
 
@@ -27,8 +29,9 @@ class MemoryMonitor {
       if (totalKiB != null && availableKiB != null) break;
     }
 
-    final totalKB = ((totalKiB ??= 0) / 1024 * 1000).toInt();
-    final availableKB = ((availableKiB ??= 0) / 1024 * 1000).toInt();
+    // Convert KiB (binary) to KB (decimal) using the helper.
+    final totalKB = kibToKB(totalKiB ?? 0);
+    final availableKB = kibToKB(availableKiB ?? 0);
     final usedKB = (totalKB - availableKB).clamp(0, totalKB);
 
     return (totalKB: totalKB, usedKB: usedKB, availableKB: availableKB);
