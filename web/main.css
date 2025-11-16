@@ -1,5 +1,5 @@
 :root {
-	--progress-bar-height: 2px;
+	--progress-bar-height: 1px;
 }
 
 * {
@@ -26,10 +26,29 @@ body {
 	max-width: 1400px;
 	margin: auto;
 	margin-top: var(--progress-bar-height);
+	margin-bottom: 10px;
 }
 
 h1 {
 	display: inline-block;
+	margin-bottom: 10px;
+}
+
+#header {
+	position: relative;
+}
+
+#links {
+	position: absolute;
+	right: 0;
+	bottom: 10px;
+}
+
+#links a {
+	color: #999;
+	display: inline-block;
+	margin: 0 5px;
+	font-size: 0.9em;
 }
 
 .graphs {
