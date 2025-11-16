@@ -5,7 +5,7 @@ const historySize = 10;
 const gpuHistory = [];
 const cpuHistory = [];
 const gpuTempHistory = [];
-const cpuTempHistory = [];
+const systemTempHistory = [];
 const memoryHistory = [];
 
 // Consistent colors for GPU and CPU.
@@ -163,7 +163,7 @@ function initCharts() {
 				backgroundColor: GPU_BG_COLOR,
 				tension: 0.4,
 			}, {
-				label: 'CPU °C',
+				label: 'System °C',
 				data: [],
 				borderColor: CPU_COLOR,
 				backgroundColor: CPU_BG_COLOR,
@@ -262,14 +262,14 @@ function updateCharts(data) {
 	gpuHistory.push(data.gpu.usagePercent);
 	cpuHistory.push(data.cpu.usagePercent);
 	gpuTempHistory.push(data.gpu.temperatureC);
-	cpuTempHistory.push(data.temperature.systemTemperatureC);
+	systemTempHistory.push(data.temperature.systemTemperatureC);
 	memoryHistory.push(memoryUsed);
 
 	if (gpuHistory.length > historySize) {
 		gpuHistory.shift();
 		cpuHistory.shift();
 		gpuTempHistory.shift();
-		cpuTempHistory.shift();
+		systemTempHistory.shift();
 		memoryHistory.shift();
 	}
 
@@ -286,7 +286,7 @@ function updateCharts(data) {
 	// Update temperature line chart.
 	tempChart.data.labels = Array.from({ length: gpuTempHistory.length }, (_, i) => i + 1);
 	tempChart.data.datasets[0].data = [...gpuTempHistory];
-	tempChart.data.datasets[1].data = [...cpuTempHistory];
+	tempChart.data.datasets[1].data = [...systemTempHistory];
 	tempChart.update('none');
 
 	// Update memory gauge.
