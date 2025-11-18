@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'constants.dart';
+import 'utils.dart';
 
 /// Represents GPU usage metrics.
 typedef GpuMetrics = ({int usagePercent, int temperatureC, double powerW});
@@ -42,6 +43,7 @@ class GpuMonitor {
   void _handleProcessDone() {
     // If `nvidia-smi` quit but consumer still wants data, restart.
     if (_metricsController.hasListener && !_metricsController.isPaused) {
+      log('nvidia-smi process terminated unexpectedly');
       _stop();
       _start();
     }
@@ -91,6 +93,7 @@ class GpuMonitor {
       process.stderr.transform(utf8.decoder).listen((errorOutput) {
         final trimmed = errorOutput.trim();
         if (trimmed.isNotEmpty) {
+          log('nvidia-smi stderr: $trimmed');
           _metricsController.addError(StateError('nvidia-smi: $trimmed'));
         }
       });

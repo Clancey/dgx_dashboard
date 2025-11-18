@@ -11,6 +11,7 @@ import 'cpu.dart';
 import 'gpu.dart';
 import 'memory.dart';
 import 'temps.dart';
+import 'utils.dart';
 
 typedef _Metrics = ({
   GpuMetrics gpu,
@@ -69,7 +70,7 @@ class Server {
     final clickableHost = address == InternetAddress.anyIPv4
         ? 'localhost'
         : address.host;
-    print('Server listening on http://$clickableHost:$port');
+    log('Server listening on http://$clickableHost:$port');
 
     await server.map(_handleRequest).toList();
   }
@@ -125,7 +126,7 @@ class Server {
     if (_metricsSubscription case final sub? when !sub.isPaused) {
       _metricsSubscription?.pause();
       _clientMetricsBuffer.clear();
-      print('Paused metrics stream and cleared data buffer');
+      log('Paused metrics stream and cleared data buffer');
     }
   }
 
@@ -134,7 +135,7 @@ class Server {
 
     if (_metricsSubscription case final sub? when sub.isPaused) {
       _metricsSubscription?.resume();
-      print('Resumed metrics stream');
+      log('Resumed metrics stream');
 
       _suspendTimer.cancel();
     }
@@ -180,7 +181,7 @@ class Server {
       return;
     }
 
-    print('Starting metrics stream');
+    log('Starting metrics stream');
     _metricsSubscription = metricsStream.listen((ev) {
       final message = {
         'gpu': {
@@ -213,7 +214,7 @@ class Server {
         try {
           client.add(jsonPayload);
         } catch (e) {
-          print('Error sending to client: $e');
+          log('Error sending to client: $e');
         }
       }
     });
