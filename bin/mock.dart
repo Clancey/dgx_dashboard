@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:dgx_dashboard/constants.dart';
 import 'package:dgx_dashboard/conversions.dart';
 import 'package:dgx_dashboard/cpu.dart';
+import 'package:dgx_dashboard/docker.dart';
 import 'package:dgx_dashboard/gpu.dart';
 import 'package:dgx_dashboard/memory.dart';
 import 'package:dgx_dashboard/server.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
     MockCpuMonitor(),
     MockMemoryMonitor(),
     MockTemperatureMonitor(),
+    MockDockerMonitor(),
   );
   await server.start(InternetAddress.anyIPv4, 8080);
 }
@@ -32,6 +34,34 @@ class MockCpuMonitor implements CpuMonitor {
     final change = _random.nextInt(20);
     _current = (_current + (change - 10)).clamp(0, 100);
     return (usagePercent: _current);
+  }
+}
+
+/// A mock implementation of [DockerMonitor] that returns some hard-coded
+/// values.
+class MockDockerMonitor implements DockerMonitor {
+  @override
+  Future<List<DockerContainer>> getContainers() async {
+    return [
+      (
+        id: 'a1b2c3d4e5f6',
+        image: 'fake-web-server:latest',
+        command: '/docker-entrypoint.sh serve',
+        created: '2025-11-18 19:01:02',
+        status: 'Up 2 hours',
+        ports: '0.0.0.0:80->80/tcp',
+        names: 'web-server',
+      ),
+      (
+        id: 'f6e5d4c3b2a1',
+        image: 'postgres:13',
+        command: 'docker-entrypoint.sh postgres',
+        created: '2025-11-18 01:00:00',
+        status: 'Exited (0) 10 minutes ago',
+        ports: '',
+        names: 'db-server',
+      ),
+    ];
   }
 }
 

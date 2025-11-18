@@ -32,21 +32,44 @@
             <h3>Memory Usage</h3>
             <div class="subgraphs">
                 <div class="subgroup half">
-                    <div class="chart-container small"><canvas id="memory_gauge"></canvas></div>
+                    <div class="chart-container small"><canvas id="memory-gauge"></canvas></div>
                 </div>
                 <div class="subgroup half">
-                    <div class="chart-container small"><canvas id="memory_chart"></canvas></div>
+                    <div class="chart-container small"><canvas id="memory-chart"></canvas></div>
                 </div>
             </div>
         </div>
         <div class="group half">
             <h3>GPU & CPU Usage</h3>
-            <div class="chart-container"><canvas id="usage_chart"></canvas></div>
-            <div id="gpu_power_label" class="power-label">GPU Power: 0 W</div>
+            <div class="chart-container"><canvas id="usage-chart"></canvas></div>
+            <div id="gpu-power-label" class="power-label">GPU Power: 0 W</div>
         </div>
         <div class="group half">
             <h3>Temperatures</h3>
-            <div class="chart-container"><canvas id="temp_chart"></canvas></div>
+            <div class="chart-container"><canvas id="temp-chart"></canvas></div>
+        </div>
+        <div class="group full" id="docker-section" style="display: none;">
+            <h3>Docker Containers</h3>
+            <table class="docker-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Ports</th>
+                    </tr>
+                </thead>
+                <tbody id="docker-table-body"></tbody>
+            </table>
+            <template id="docker-row-template">
+                <tr>
+                    <td>
+                        <span class="name"></span>
+                        <span class="image detail"></span>
+                    </td>
+                    <td><span class="status-badge"></span> <span class="status detail"></span></td>
+                    <td class="ports mono"></td>
+                </tr>
+            </template>
         </div>
     </div>
 </div>

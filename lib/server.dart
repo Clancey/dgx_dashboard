@@ -8,17 +8,11 @@ import 'package:path/path.dart' as path;
 
 import 'constants.dart';
 import 'cpu.dart';
+import 'docker.dart';
 import 'gpu.dart';
 import 'memory.dart';
 import 'temps.dart';
 import 'utils.dart';
-
-typedef _Metrics = ({
-  GpuMetrics gpu,
-  CpuMetrics cpu,
-  TemperatureMetrics temperature,
-  MemoryMetrics memory,
-});
 
 /// A HTTP server that handles serving the dashboard.
 class Server {
@@ -26,6 +20,7 @@ class Server {
   final CpuMonitor _cpuMonitor;
   final MemoryMonitor _memoryMonitor;
   final TemperatureMonitor _temperatureMonitor;
+  final DockerMonitor _dockerMonitor;
 
   /// A stream of all metrics.
   ///
@@ -38,13 +33,16 @@ class Server {
     return (gpu: gpu, cpu: cpu, temperature: temperature, memory: memory);
   });
 
+  var _latestDockerContainers = <DockerContainer>[];
+  var _lastDockerUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+
   /// A buffer of the last 10 events so that when a new client connects
   /// we can provide some immediate history.
   final _clientMetricsBuffer = <Map<String, Object?>>[];
 
   final Set<WebSocket> _connectedClients = {};
 
-  StreamSubscription<_Metrics>? _metricsSubscription;
+  StreamSubscription<void>? _metricsSubscription;
 
   /// A timer that pauses metrics gathering and clears the data buffer a few
   /// seconds after the last client disconnects. This allows us to keep tracking
@@ -62,6 +60,7 @@ class Server {
     this._cpuMonitor,
     this._memoryMonitor,
     this._temperatureMonitor,
+    this._dockerMonitor,
   );
 
   /// Starts the server listening on [address]:[port].
@@ -73,6 +72,15 @@ class Server {
     log('Server listening on http://$clickableHost:$port');
 
     await server.map(_handleRequest).toList();
+  }
+
+  Future<List<DockerContainer>> _getDockerContainers() async {
+    final now = DateTime.now();
+    if (now.difference(_lastDockerUpdate).inSeconds > dockerPollSeconds) {
+      _latestDockerContainers = await _dockerMonitor.getContainers();
+      _lastDockerUpdate = now;
+    }
+    return _latestDockerContainers;
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -182,7 +190,8 @@ class Server {
     }
 
     log('Starting metrics stream');
-    _metricsSubscription = metricsStream.listen((ev) {
+    _metricsSubscription = metricsStream.listen((ev) async {
+      final docker = await _getDockerContainers();
       final message = {
         'gpu': {
           'usagePercent': ev.gpu.usagePercent,
@@ -198,6 +207,19 @@ class Server {
           'availableKB': ev.memory.availableKB,
           'totalKB': ev.memory.totalKB,
         },
+        'docker': docker
+            .map(
+              (c) => {
+                'id': c.id,
+                'image': c.image,
+                'command': c.command,
+                'created': c.created,
+                'status': c.status,
+                'ports': c.ports,
+                'names': c.names,
+              },
+            )
+            .toList(),
         'keepEvents': keepEvents,
         'nextPollSeconds': pollSeconds,
       };

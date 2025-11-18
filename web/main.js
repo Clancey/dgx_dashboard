@@ -107,7 +107,7 @@ function updateGauge(chart, value, maxValue) {
 
 function initCharts() {
 	// Usage line chart
-	const usageCtx = document.getElementById('usage_chart').getContext('2d');
+	const usageCtx = document.getElementById('usage-chart').getContext('2d');
 	usageChart = new Chart(usageCtx, {
 		type: 'line',
 		data: {
@@ -151,7 +151,7 @@ function initCharts() {
 	});
 
 	// Temperature line chart (combined GPU and CPU)
-	const tempCtx = document.getElementById('temp_chart').getContext('2d');
+	const tempCtx = document.getElementById('temp-chart').getContext('2d');
 	tempChart = new Chart(tempCtx, {
 		type: 'line',
 		data: {
@@ -194,9 +194,9 @@ function initCharts() {
 		}
 	});
 
-	memoryGauge = createGauge('memory_gauge', '/128GB', 100, 60, 80);
+	memoryGauge = createGauge('memory-gauge', '/128GB', 100, 60, 80);
 
-	const memoryCtx = document.getElementById('memory_chart').getContext('2d');
+	const memoryCtx = document.getElementById('memory-chart').getContext('2d');
 	memoryLineChart = new Chart(memoryCtx, {
 		type: 'line',
 		data: {
@@ -280,7 +280,7 @@ function updateCharts(data) {
 	usageChart.update('none');
 
 	// Update GPU power label.
-	document.getElementById('gpu_power_label').textContent =
+	document.getElementById('gpu-power-label').textContent =
 		`GPU Power: ${data.gpu.powerW.toFixed(0)} W`;
 
 	// Update temperature line chart.
@@ -303,6 +303,39 @@ function updateCharts(data) {
 	const maxTemp = Math.max(data.gpu.temperatureC, data.temperature.systemTemperatureC);
 	document.title = `DGX ${Math.trunc(usedGB).toFixed(0)}GB ${maxUsage.toFixed(0)}% ${maxTemp.toFixed(0)}°`;
 
+}
+
+function updateDocker(data) {
+	const dockerSection = document.getElementById('docker-section');
+	const tableBody = document.getElementById('docker-table-body');
+	const template = document.getElementById('docker-row-template');
+
+	if (!data.docker || data.docker.length === 0) {
+		dockerSection.style.display = 'none';
+		return;
+	}
+
+	dockerSection.style.display = 'block';
+	tableBody.innerHTML = '';
+
+	data.docker.forEach(container => {
+		const clone = template.content.cloneNode(true);
+
+		clone.querySelector('.image').textContent = container.image;
+		clone.querySelector('.name').textContent = container.names;
+		clone.querySelector('.ports').textContent = container.ports;
+		clone.querySelector('.status').textContent = `${container.status}`;
+
+		const isRunning = container.status.toLowerCase().startsWith('up ');
+		const statusClass = isRunning ? 'status-running' : 'status-stopped';
+		const statusLabel = isRunning ? 'Running' : 'Stopped';
+
+		const badge = clone.querySelector('.status-badge');
+		badge.textContent = statusLabel;
+		badge.classList.add(statusClass);
+
+		tableBody.appendChild(clone);
+	});
 }
 
 const statusDiv = document.getElementById('status');
@@ -335,6 +368,7 @@ function connect() {
 	ws.onmessage = (event) => {
 		const data = JSON.parse(event.data);
 		updateCharts(data);
+		updateDocker(data);
 
 		// Start or restart the progress bar based on the server-provided interval.
 		startProgressBar(data.nextPollSeconds);

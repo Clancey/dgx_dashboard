@@ -1,0 +1,9 @@
+.dart_tool
+.git
+.github
+.gitignore
+.vscode
+Dockerfile
+LICENSE
+README.md
+screenshot.png

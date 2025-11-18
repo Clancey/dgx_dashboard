@@ -94,7 +94,7 @@ h1 {
 	height: 200px;
 }
 
-#memory_gauge {
+#memory-gauge {
 	max-height: 180px;
 }
 
@@ -102,5 +102,60 @@ h1 {
 	text-align: center;
 	font-size: 16px;
 	margin-top: 10px;
+}
+
+.docker-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.docker-table th,
+.docker-table td {
+	text-align: left;
+	padding: 8px;
+	border-bottom: 1px solid #eee;
+}
+
+.docker-table th {
+	background-color: #f9f9f9;
 	font-weight: bold;
+}
+
+.docker-table tr:last-child td {
+	border-bottom: none;
+}
+
+.mono {
+	font-family: monospace;
+	color: #555;
+}
+
+.status-badge {
+	display: inline-block;
+	padding: 2px 6px;
+	border-radius: 4px;
+	border: 1px solid #b7ebdf;
+	font-size: 0.85em;
+	font-weight: bold;
+}
+
+.status-running {
+	background-color: #e6fffa;
+	color: #009068;
+}
+
+.status-stopped {
+	background-color: #fff5f5;
+	color: #c53030;
+	border-color: #feb2b2;
+}
+
+.name {
+	font-size: 1.1em;
+	font-weight: bold;
+}
+
+.detail {
+	color: #999;
+	font-size: 0.75em;
 }
