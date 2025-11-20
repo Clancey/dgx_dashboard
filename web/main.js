@@ -259,9 +259,9 @@ function updateCharts(data) {
 	const totalGB = data.memory.totalKB / 1000000;
 	const memoryUsed = parseFloat(usedGB.toFixed(1));
 
-	gpuHistory.push(data.gpu.usagePercent);
+	gpuHistory.push(data.gpu?.usagePercent);
 	cpuHistory.push(data.cpu.usagePercent);
-	gpuTempHistory.push(data.gpu.temperatureC);
+	gpuTempHistory.push(data.gpu?.temperatureC);
 	systemTempHistory.push(data.temperature.systemTemperatureC);
 	memoryHistory.push(memoryUsed);
 
@@ -281,7 +281,7 @@ function updateCharts(data) {
 
 	// Update GPU power label.
 	document.getElementById('gpu-power-label').textContent =
-		`GPU Power: ${data.gpu.powerW.toFixed(0)} W`;
+		`GPU Power: ${data.gpu?.powerW?.toFixed(0) ?? '?'} W`;
 
 	// Update temperature line chart.
 	tempChart.data.labels = Array.from({ length: gpuTempHistory.length }, (_, i) => i + 1);
@@ -299,8 +299,8 @@ function updateCharts(data) {
 	memoryLineChart.update('none');
 
 	// Update browser tab title.
-	const maxUsage = Math.max(data.gpu.usagePercent, data.cpu.usagePercent);
-	const maxTemp = Math.max(data.gpu.temperatureC, data.temperature.systemTemperatureC);
+	const maxUsage = Math.max(data.gpu?.usagePercent ?? 0, data.cpu.usagePercent);
+	const maxTemp = Math.max(data.gpu?.temperatureC ?? 0, data.temperature.systemTemperatureC);
 	document.title = `DGX ${Math.trunc(usedGB).toFixed(0)}GB ${maxUsage.toFixed(0)}% ${maxTemp.toFixed(0)}°`;
 
 }
@@ -368,11 +368,10 @@ function connect() {
 	ws.onmessage = (event) => {
 		const data = JSON.parse(event.data);
 
-		if (data == null) {
+		if (!data.gpu) {
 			statusDiv.textContent = 'nvidia-smi has crashed, see log output';
 			statusDiv.style.color = '#f48771';
 			console.error('nvidia-smi has crashed, see log output');
-			return;
 		}
 
 		updateCharts(data);

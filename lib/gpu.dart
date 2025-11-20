@@ -25,7 +25,7 @@ class GpuMonitor {
   ///
   /// The monitor will automatically start and stop the `nvidia-smi` process
   /// based on the stream subscription state.
-  GpuMonitor() : _metricsController = StreamController<GpuMetrics>() {
+  GpuMonitor() : _metricsController = StreamController<GpuMetrics?>() {
     _metricsController
       ..onListen = _start
       ..onPause = _stop
@@ -58,7 +58,7 @@ class GpuMonitor {
         log(
           'nvidia-smi process terminated unexpectedly - ${--_remainingRestarts} restarts remaining',
         );
-        Future<void>.delayed(const Duration(seconds: 1)).then((_) => _start());
+        Future<void>.delayed(const Duration(seconds: 5)).then((_) => _start());
       } else {
         log('nvidia-smi process terminated unexpectedly - will not restart');
         _metricsController.add(null);
@@ -69,7 +69,10 @@ class GpuMonitor {
   /// Parse an output line from `nvidia-smi` and emit an event with the metrics.
   void _parseAndEmitMetrics(String line) {
     final parts = line.split(',').map((s) => s.trim()).toList();
-    if (parts.length < 3) return;
+    if (parts.length < 3) {
+      log('unexpected nvidia-smi output: $line');
+      return;
+    }
 
     try {
       _metricsController.add((
@@ -79,6 +82,7 @@ class GpuMonitor {
       ));
     } catch (_) {
       // Ignore malformed lines.
+      log('unparsable nvidia-smi output: $line');
     }
   }
 
@@ -97,7 +101,7 @@ class GpuMonitor {
 
       unawaited(
         process.exitCode.then((code) {
-          log('nvidia-semi terminated with $exitCode');
+          log('nvidia-smi exited with code $exitCode');
         }),
       );
 
