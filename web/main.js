@@ -350,6 +350,8 @@ function updateDocker(data) {
 		clone.querySelector('.image').textContent = container.image;
 		clone.querySelector('.name').textContent = container.names;
 		clone.querySelector('.ports').textContent = container.ports;
+		clone.querySelector('.cpu').textContent = container.cpu;
+		clone.querySelector('.memory').textContent = container.memory;
 		clone.querySelector('.status').textContent = `${container.status}`;
 
 		const isRunning = container.status.toLowerCase().startsWith('up ');

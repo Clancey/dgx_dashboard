@@ -241,6 +241,8 @@ class Server {
                 'status': c.status,
                 'ports': c.ports,
                 'names': c.names,
+                'cpu': c.cpu,
+                'memory': c.memory,
               },
             )
             .toList(),

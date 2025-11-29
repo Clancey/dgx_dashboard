@@ -9,6 +9,8 @@ typedef DockerContainer = ({
   String status,
   String ports,
   String names,
+  String cpu,
+  String memory,
 });
 
 /// Monitors Docker containers using the `docker` command-line tool.
@@ -29,25 +31,52 @@ class DockerMonitor {
         return [];
       }
 
-      final lines = result.stdout.toString().trim().split('\n');
-      if (lines.isEmpty) {
+      final output = result.stdout.toString().trim();
+      final lines = output.split('\n');
+      if (output.isEmpty || lines.isEmpty) {
         return [];
+      }
+
+      // Fetch stats to get CPU/Memory usage.
+      final statsResult = await Process.run('docker', [
+        'stats',
+        '--all',
+        '--no-stream',
+        '--no-trunc',
+        '--format',
+        '{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}',
+      ]);
+
+      final statsMap = <String, ({String cpu, String memory})>{};
+      if (statsResult.exitCode == 0) {
+        final statsLines = statsResult.stdout.toString().trim().split('\n');
+        for (final line in statsLines) {
+          final parts = line.split('|');
+          if (parts.length != 3) continue;
+
+          final id = parts[0];
+          statsMap[id] = (cpu: parts[1], memory: parts[2]);
+        }
       }
 
       final containers = <DockerContainer>[];
       for (final line in lines) {
         final parts = line.split('|');
-        if (parts.length == 7) {
-          containers.add((
-            id: parts[0],
-            image: parts[1],
-            command: parts[2],
-            created: parts[3],
-            status: parts[4],
-            ports: parts[5],
-            names: parts[6],
-          ));
-        }
+        if (parts.length != 7) continue;
+
+        final id = parts[0];
+        final stats = statsMap[id];
+        containers.add((
+          id: id,
+          image: parts[1],
+          command: parts[2],
+          created: parts[3],
+          status: parts[4],
+          ports: parts[5],
+          names: parts[6],
+          cpu: stats?.cpu ?? '--',
+          memory: stats?.memory ?? '--',
+        ));
       }
       return containers;
     } catch (e) {

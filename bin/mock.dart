@@ -23,7 +23,7 @@ Future<void> main() async {
   await server.start(InternetAddress.anyIPv4, 8080);
 }
 
-const simulateNvidiaSmiCrash = true;
+const simulateNvidiaSmiCrash = false;
 
 final _random = Random();
 
@@ -52,6 +52,8 @@ class MockDockerMonitor implements DockerMonitor {
       status: 'Up 2 hours',
       ports: '0.0.0.0:80->80/tcp',
       names: 'web-server',
+      cpu: '0.5%',
+      memory: '50MiB / 1GiB',
     ),
     (
       id: 'f6e5d4c3b2a1',
@@ -61,6 +63,8 @@ class MockDockerMonitor implements DockerMonitor {
       status: 'Exited (0) 10 minutes ago',
       ports: '',
       names: 'db-server',
+      cpu: '--',
+      memory: '--',
     ),
     (
       id: 'd4c3b2a1f6e5',
@@ -70,6 +74,8 @@ class MockDockerMonitor implements DockerMonitor {
       status: 'Up 5 hours',
       ports: '0.0.0.0:8080->8080/tcp',
       names: 'dgx_dashboard',
+      cpu: '1.2%',
+      memory: '120MiB / 1GiB',
     ),
   ];
 
@@ -98,6 +104,8 @@ class MockDockerMonitor implements DockerMonitor {
             status: 'Up 1 second',
             ports: container.ports,
             names: container.names,
+            cpu: '0.1%',
+            memory: '10MiB / 1GiB',
           );
         }),
       );
@@ -121,6 +129,8 @@ class MockDockerMonitor implements DockerMonitor {
             status: 'Exited (0) 1 minute ago',
             ports: container.ports,
             names: container.names,
+            cpu: '--',
+            memory: '--',
           );
         }),
       );
