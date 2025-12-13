@@ -104,6 +104,14 @@ class Server {
   }
 
   Future<void> _handleWebSocket(HttpRequest request) async {
+    if (request.headers.value('Origin') != request.requestedUri.origin) {
+      request.response
+        ..statusCode = HttpStatus.forbidden
+        ..write('Cross-origin connection not allowed');
+      await request.response.close();
+      return;
+    }
+
     final ws = await WebSocketTransformer.upgrade(request);
 
     // We need the ping otherwise onDone will never fire and we'll never detect
