@@ -82,7 +82,15 @@ class Server {
   /// Updates the Docker container list on a timer.
   Future<void> _updateDockerContainers() async {
     try {
+      final stopwatch = Stopwatch()..start();
       final containers = await _dockerMonitor.getContainers();
+      stopwatch.stop();
+      
+      // Log if Docker operations are taking too long
+      if (stopwatch.elapsedMilliseconds > 5000) {
+        log('Warning: Docker getContainers() took ${stopwatch.elapsedMilliseconds}ms (> 5s)');
+      }
+      
       containers.sort((c1, c2) => c1.names.compareTo(c2.names));
       _latestDockerContainers = containers;
     } catch (e) {
@@ -137,22 +145,22 @@ class Server {
           final message = jsonDecode(data as String);
           if (message case {'command': 'docker-start', 'id': final String id}) {
             await _dockerMonitor.startContainer(id);
-            // Immediately update Docker containers after a command
-            unawaited(_updateDockerContainers());
+            // Reset timer to avoid concurrent updates
+            _resetDockerPolling();
           } else if (message case {
             'command': 'docker-stop',
             'id': final String id,
           }) {
             await _dockerMonitor.stopContainer(id);
-            // Immediately update Docker containers after a command
-            unawaited(_updateDockerContainers());
+            // Reset timer to avoid concurrent updates
+            _resetDockerPolling();
           } else if (message case {
             'command': 'docker-restart',
             'id': final String id,
           }) {
             await _dockerMonitor.restartContainer(id);
-            // Immediately update Docker containers after a command
-            unawaited(_updateDockerContainers());
+            // Reset timer to avoid concurrent updates
+            _resetDockerPolling();
           }
         } catch (e) {
           log('Error handling message:\n$data:\n$e');
@@ -240,6 +248,16 @@ class Server {
       Duration(seconds: dockerPollSeconds),
       (_) => _updateDockerContainers(),
     );
+  }
+
+  /// Resets the Docker polling timer and immediately updates containers.
+  /// 
+  /// This prevents concurrent Docker operations by canceling the existing
+  /// timer, updating immediately, and restarting the timer.
+  void _resetDockerPolling() {
+    _dockerPollTimer?.cancel();
+    _dockerPollTimer = null;
+    _startDockerPolling();
   }
 
   void _startMetricsStream() {
