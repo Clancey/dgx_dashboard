@@ -34,7 +34,9 @@ class Server {
   });
 
   var _latestDockerContainers = <DockerContainer>[];
-  var _lastDockerUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// A timer for polling Docker containers on a separate schedule from metrics.
+  Timer? _dockerPollTimer;
 
   /// A buffer of the last 10 events so that when a new client connects
   /// we can provide some immediate history.
@@ -77,14 +79,15 @@ class Server {
     await server.map(_handleRequest).toList();
   }
 
-  Future<List<DockerContainer>> _getDockerContainers() async {
-    final now = DateTime.now();
-    if (now.difference(_lastDockerUpdate).inSeconds > dockerPollSeconds) {
-      _latestDockerContainers = await _dockerMonitor.getContainers();
-      _latestDockerContainers.sort((c1, c2) => c1.names.compareTo(c2.names));
-      _lastDockerUpdate = now;
+  /// Updates the Docker container list on a timer.
+  Future<void> _updateDockerContainers() async {
+    try {
+      final containers = await _dockerMonitor.getContainers();
+      containers.sort((c1, c2) => c1.names.compareTo(c2.names));
+      _latestDockerContainers = containers;
+    } catch (e) {
+      log('Error updating Docker containers: $e');
     }
-    return _latestDockerContainers;
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -134,19 +137,22 @@ class Server {
           final message = jsonDecode(data as String);
           if (message case {'command': 'docker-start', 'id': final String id}) {
             await _dockerMonitor.startContainer(id);
-            _lastDockerUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+            // Immediately update Docker containers after a command
+            unawaited(_updateDockerContainers());
           } else if (message case {
             'command': 'docker-stop',
             'id': final String id,
           }) {
             await _dockerMonitor.stopContainer(id);
-            _lastDockerUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+            // Immediately update Docker containers after a command
+            unawaited(_updateDockerContainers());
           } else if (message case {
             'command': 'docker-restart',
             'id': final String id,
           }) {
             await _dockerMonitor.restartContainer(id);
-            _lastDockerUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+            // Immediately update Docker containers after a command
+            unawaited(_updateDockerContainers());
           }
         } catch (e) {
           log('Error handling message:\n$data:\n$e');
@@ -168,6 +174,10 @@ class Server {
       _clientMetricsBuffer.clear();
       log('Paused metrics stream and cleared data buffer');
     }
+
+    // Stop Docker polling when no clients are connected
+    _dockerPollTimer?.cancel();
+    _dockerPollTimer = null;
   }
 
   void _resumeStreamIfClients() {
@@ -179,6 +189,9 @@ class Server {
 
       _suspendTimer.cancel();
     }
+
+    // Start Docker polling when clients are connected
+    _startDockerPolling();
   }
 
   Future<void> _serveStaticFile(HttpRequest request) async {
@@ -215,6 +228,20 @@ class Server {
     }
   }
 
+  void _startDockerPolling() {
+    if (_dockerPollTimer != null) return;
+
+    // Update immediately when starting
+    unawaited(_updateDockerContainers());
+
+    // Then poll on a timer
+    log('Starting Docker polling');
+    _dockerPollTimer = Timer.periodic(
+      Duration(seconds: dockerPollSeconds),
+      (_) => _updateDockerContainers(),
+    );
+  }
+
   void _startMetricsStream() {
     if (_metricsSubscription != null) {
       _resumeStreamIfClients();
@@ -222,70 +249,58 @@ class Server {
     }
 
     log('Starting metrics stream');
-    _metricsSubscription = metricsStream.listen((ev) async {
-      // Pause the subscription to prevent concurrent processing of events.
-      // This ensures that if Docker operations take longer than the poll
-      // interval, we don't pile up multiple async handlers.
-      // Note: pause() is idempotent - calling it multiple times just increments
-      // an internal counter, and resume() will decrement it. Since we pause at
-      // the start of each handler, new events are queued until we resume at the
-      // end, ensuring serial processing.
-      _metricsSubscription?.pause();
-      
-      try {
-        final message = {
-          if (ev.gpu case final gpu?)
-            'gpu': {
-              'usagePercent': gpu.usagePercent,
-              'powerW': gpu.powerW,
-              'temperatureC': gpu.temperatureC,
-            },
-          'cpu': {'usagePercent': ev.cpu.usagePercent},
-          'temperature': {
-            'systemTemperatureC': ev.temperature.systemTemperatureC,
+    _metricsSubscription = metricsStream.listen((ev) {
+      // Docker data is fetched on a separate timer, so we just include
+      // the latest snapshot here without blocking on async operations.
+      final message = {
+        if (ev.gpu case final gpu?)
+          'gpu': {
+            'usagePercent': gpu.usagePercent,
+            'powerW': gpu.powerW,
+            'temperatureC': gpu.temperatureC,
           },
-          'memory': {
-            'usedKB': ev.memory.usedKB,
-            'availableKB': ev.memory.availableKB,
-            'totalKB': ev.memory.totalKB,
-          },
-          'docker': (await _getDockerContainers())
-              .map(
-                (c) => {
-                  'id': c.id,
-                  'image': c.image,
-                  'command': c.command,
-                  'created': c.created,
-                  'status': c.status,
-                  'ports': c.ports,
-                  'names': c.names,
-                  'cpu': c.cpu,
-                  'memory': c.memory,
-                },
-              )
-              .toList(),
-          'keepEvents': keepEvents,
-          'nextPollSeconds': pollSeconds,
-        };
+        'cpu': {'usagePercent': ev.cpu.usagePercent},
+        'temperature': {
+          'systemTemperatureC': ev.temperature.systemTemperatureC,
+        },
+        'memory': {
+          'usedKB': ev.memory.usedKB,
+          'availableKB': ev.memory.availableKB,
+          'totalKB': ev.memory.totalKB,
+        },
+        'docker': _latestDockerContainers
+            .map(
+              (c) => {
+                'id': c.id,
+                'image': c.image,
+                'command': c.command,
+                'created': c.created,
+                'status': c.status,
+                'ports': c.ports,
+                'names': c.names,
+                'cpu': c.cpu,
+                'memory': c.memory,
+              },
+            )
+            .toList(),
+        'keepEvents': keepEvents,
+        'nextPollSeconds': pollSeconds,
+      };
 
-        // Keep a buffer of events to send to new clients.
-        _clientMetricsBuffer.add(message);
-        if (_clientMetricsBuffer.length > keepEvents) {
-          _clientMetricsBuffer.length = keepEvents;
-        }
+      // Keep a buffer of events to send to new clients.
+      _clientMetricsBuffer.add(message);
+      if (_clientMetricsBuffer.length > keepEvents) {
+        _clientMetricsBuffer.length = keepEvents;
+      }
 
-        // Send to all connected clients.
-        final jsonPayload = jsonEncode(message);
-        for (final client in _connectedClients.toList()) {
-          try {
-            client.add(jsonPayload);
-          } catch (e) {
-            log('Error sending to client: $e');
-          }
+      // Send to all connected clients.
+      final jsonPayload = jsonEncode(message);
+      for (final client in _connectedClients.toList()) {
+        try {
+          client.add(jsonPayload);
+        } catch (e) {
+          log('Error sending to client: $e');
         }
-      } finally {
-        // Resume the subscription to receive the next event.
-        _metricsSubscription?.resume();
       }
     });
   }

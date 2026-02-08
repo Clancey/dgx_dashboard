@@ -22,14 +22,14 @@ class MemoryMonitor {
     for (final line in File('/proc/meminfo').readAsLinesSync()) {
       if (totalKiB == null && line.startsWith('MemTotal:')) {
         totalKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
-        // If parsing failed, set to 0 to prevent infinite searching
+        // If parsing failed, set to 0 to avoid iterating through the rest
         if (totalKiB == null) {
           log('Warning: Failed to parse MemTotal from /proc/meminfo: $line');
           totalKiB = 0;
         }
       } else if (availableKiB == null && line.startsWith('MemAvailable:')) {
         availableKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
-        // If parsing failed, set to 0 to prevent infinite searching
+        // If parsing failed, set to 0 to avoid iterating through the rest
         if (availableKiB == null) {
           log('Warning: Failed to parse MemAvailable from /proc/meminfo: $line');
           availableKiB = 0;
