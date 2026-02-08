@@ -21,8 +21,12 @@ class MemoryMonitor {
     for (final line in File('/proc/meminfo').readAsLinesSync()) {
       if (totalKiB == null && line.startsWith('MemTotal:')) {
         totalKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
+        // If parsing failed, set to 0 to prevent infinite searching
+        totalKiB ??= 0;
       } else if (availableKiB == null && line.startsWith('MemAvailable:')) {
         availableKiB = int.tryParse(line.replaceAll(RegExp(r'[^0-9]'), ''));
+        // If parsing failed, set to 0 to prevent infinite searching
+        availableKiB ??= 0;
       }
 
       // Exit early once we have both values

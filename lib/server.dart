@@ -223,55 +223,65 @@ class Server {
 
     log('Starting metrics stream');
     _metricsSubscription = metricsStream.listen((ev) async {
-      final message = {
-        if (ev.gpu case final gpu?)
-          'gpu': {
-            'usagePercent': gpu.usagePercent,
-            'powerW': gpu.powerW,
-            'temperatureC': gpu.temperatureC,
+      // Pause the subscription to prevent concurrent processing of events.
+      // This ensures that if Docker operations take longer than the poll
+      // interval, we don't pile up multiple async handlers.
+      _metricsSubscription?.pause();
+      
+      try {
+        final message = {
+          if (ev.gpu case final gpu?)
+            'gpu': {
+              'usagePercent': gpu.usagePercent,
+              'powerW': gpu.powerW,
+              'temperatureC': gpu.temperatureC,
+            },
+          'cpu': {'usagePercent': ev.cpu.usagePercent},
+          'temperature': {
+            'systemTemperatureC': ev.temperature.systemTemperatureC,
           },
-        'cpu': {'usagePercent': ev.cpu.usagePercent},
-        'temperature': {
-          'systemTemperatureC': ev.temperature.systemTemperatureC,
-        },
-        'memory': {
-          'usedKB': ev.memory.usedKB,
-          'availableKB': ev.memory.availableKB,
-          'totalKB': ev.memory.totalKB,
-        },
-        'docker': (await _getDockerContainers())
-            .map(
-              (c) => {
-                'id': c.id,
-                'image': c.image,
-                'command': c.command,
-                'created': c.created,
-                'status': c.status,
-                'ports': c.ports,
-                'names': c.names,
-                'cpu': c.cpu,
-                'memory': c.memory,
-              },
-            )
-            .toList(),
-        'keepEvents': keepEvents,
-        'nextPollSeconds': pollSeconds,
-      };
+          'memory': {
+            'usedKB': ev.memory.usedKB,
+            'availableKB': ev.memory.availableKB,
+            'totalKB': ev.memory.totalKB,
+          },
+          'docker': (await _getDockerContainers())
+              .map(
+                (c) => {
+                  'id': c.id,
+                  'image': c.image,
+                  'command': c.command,
+                  'created': c.created,
+                  'status': c.status,
+                  'ports': c.ports,
+                  'names': c.names,
+                  'cpu': c.cpu,
+                  'memory': c.memory,
+                },
+              )
+              .toList(),
+          'keepEvents': keepEvents,
+          'nextPollSeconds': pollSeconds,
+        };
 
-      // Keep a buffer of events to send to new clients.
-      _clientMetricsBuffer.add(message);
-      if (_clientMetricsBuffer.length > keepEvents) {
-        _clientMetricsBuffer.length = keepEvents;
-      }
-
-      // Send to all connected clients.
-      final jsonPayload = jsonEncode(message);
-      for (final client in _connectedClients.toList()) {
-        try {
-          client.add(jsonPayload);
-        } catch (e) {
-          log('Error sending to client: $e');
+        // Keep a buffer of events to send to new clients.
+        _clientMetricsBuffer.add(message);
+        if (_clientMetricsBuffer.length > keepEvents) {
+          _clientMetricsBuffer.length = keepEvents;
         }
+
+        // Send to all connected clients.
+        final jsonPayload = jsonEncode(message);
+        for (final client in _connectedClients.toList()) {
+          try {
+            client.add(jsonPayload);
+          } catch (e) {
+            log('Error sending to client: $e');
+          }
+        }
+      } finally {
+        // Resume the subscription to receive the next event.
+        _metricsSubscription?.resume();
       }
     });
   }

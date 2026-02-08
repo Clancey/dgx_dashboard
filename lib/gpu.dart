@@ -101,7 +101,7 @@ class GpuMonitor {
 
       unawaited(
         process.exitCode.then((code) {
-          log('nvidia-smi exited with code $exitCode');
+          log('nvidia-smi exited with code $code');
         }),
       );
 
