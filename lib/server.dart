@@ -38,6 +38,9 @@ class Server {
   /// A timer for polling Docker containers on a separate schedule from metrics.
   Timer? _dockerPollTimer;
 
+  /// Flag to prevent concurrent Docker container updates.
+  bool _isUpdatingDockerContainers = false;
+
   /// A buffer of the last 10 events so that when a new client connects
   /// we can provide some immediate history.
   ///
@@ -81,6 +84,10 @@ class Server {
 
   /// Updates the Docker container list on a timer.
   Future<void> _updateDockerContainers() async {
+    // Prevent concurrent updates
+    if (_isUpdatingDockerContainers) return;
+    
+    _isUpdatingDockerContainers = true;
     try {
       final stopwatch = Stopwatch()..start();
       final containers = await _dockerMonitor.getContainers();
@@ -95,6 +102,8 @@ class Server {
       _latestDockerContainers = containers;
     } catch (e) {
       log('Error updating Docker containers: $e');
+    } finally {
+      _isUpdatingDockerContainers = false;
     }
   }
 
