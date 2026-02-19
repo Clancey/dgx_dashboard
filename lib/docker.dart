@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'utils.dart';
@@ -104,6 +105,53 @@ class DockerMonitor {
 
   /// Stops the container with [id].
   Future<bool> stopContainer(String id) => _runDockerCommand('stop', id);
+
+  /// Returns logs for the container with [id].
+  Future<String> getLogs(String id, {int tail = 100}) async {
+    if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(id)) {
+      return 'Invalid container ID';
+    }
+
+    try {
+      final result = await Process.run('docker', [
+        'logs',
+        '--tail',
+        tail.toString(),
+        id,
+      ]);
+
+      if (result.exitCode == 0) {
+        return result.stdout.toString();
+      } else {
+        return 'Error getting logs: ${result.stderr}';
+      }
+    } catch (e) {
+      return 'Error getting logs: $e';
+    }
+  }
+
+  /// Returns a stream of logs for the container with [id].
+  /// Set [follow] to true to stream logs in real-time.
+  Stream<String> streamLogs(String id, {bool follow = false}) async* {
+    if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(id)) {
+      yield 'Invalid container ID';
+      return;
+    }
+    final args = follow ? ['logs', '--follow', id] : ['logs', id];
+    final process = await Process.start('docker', args);
+
+    await for (final line
+        in process.stdout
+            .transform(utf8.decoder)
+            .takeWhile((line) => line.isNotEmpty)) {
+      yield line;
+    }
+
+    final stderr = await process.stderr.transform(utf8.decoder).join();
+    if (stderr.isNotEmpty) {
+      yield 'Error: $stderr';
+    }
+  }
 
   Future<bool> _runDockerCommand(String command, String id) async {
     // Ensure a valid container id (alphanumeric, underscore, hyphen, period).

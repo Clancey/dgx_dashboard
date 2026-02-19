@@ -78,6 +78,22 @@ class Server {
     await server.map(_handleRequest).toList();
   }
 
+  Future<void> _sendDockerLogs(WebSocket ws, String id) async {
+    try {
+      final logs = await _dockerMonitor.getLogs(id);
+      final message = {'type': 'dockerLogs', 'id': id, 'logs': logs};
+      for (final client in _connectedClients.toList()) {
+        try {
+          client.add(jsonEncode(message));
+        } catch (e) {
+          log('Error sending logs to client: $e');
+        }
+      }
+    } catch (e) {
+      log('Error getting Docker logs: $e');
+    }
+  }
+
   void _fetchDockerContainers(bool wasTriggedByCommand) {
     if (_connectedClients.isEmpty) {
       _stopDockerPolling();
@@ -177,6 +193,11 @@ class Server {
           }) {
             await _dockerMonitor.restartContainer(id);
             _fetchDockerContainers(true);
+          } else if (message case {
+            'command': 'docker-logs',
+            'id': final String id,
+          }) {
+            await _sendDockerLogs(ws, id);
           }
         } catch (e) {
           warning('Error handling message:\n$data:\n$e');

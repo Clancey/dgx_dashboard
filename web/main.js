@@ -10,6 +10,10 @@ const systemTempHistory = [];
 const memoryHistory = [];
 const pendingCommands = {};
 
+// Docker logs state
+let currentLogsContainerId = null;
+let followLogsInterval = null;
+
 const dockerActions = {
 	'docker-start': {
 		label: 'Start',
@@ -398,6 +402,10 @@ function updateDocker(data) {
 			btn.onclick = () => sendDockerCommand(btn, container.id, command, isRunning);
 		});
 
+		const logsBtn = clone.querySelector('.logs-btn');
+		logsBtn.style.display = 'inline-block';
+		logsBtn.onclick = () => showDockerLogs(container.id, container.names);
+
 		tableBody.appendChild(clone);
 	});
 }
@@ -411,6 +419,71 @@ function sendDockerCommand(btn, id, command, wasRunning) {
 		ws.send(JSON.stringify({ command, id }));
 		btn.textContent = action.pendingLabel;
 		btn.disabled = true;
+	}
+}
+
+function showDockerLogs(id, name) {
+	currentLogsContainerId = id;
+	document.getElementById('logs-container-name').textContent = name;
+	document.getElementById('logs-output').value = 'Loading logs...';
+	document.getElementById('docker-logs-modal').style.display = 'block';
+	fetchDockerLogs(id);
+
+	document.querySelector('.refresh-logs').onclick = () => fetchDockerLogs(id);
+	document.querySelector('.follow-logs').onclick = () => toggleFollowLogs(id);
+	document.querySelector('.close-modal').onclick = closeModal;
+	
+	window.onclick = (event) => {
+		if (event.target === document.getElementById('docker-logs-modal')) {
+			closeModal();
+		}
+	};
+}
+
+function closeModal() {
+	document.getElementById('docker-logs-modal').style.display = 'none';
+	currentLogsContainerId = null;
+	followLogsStop();
+}
+
+function fetchDockerLogs(id) {
+	if (ws && ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify({ command: 'docker-logs', id }));
+	}
+}
+
+function toggleFollowLogs(id) {
+	const btn = document.querySelector('.follow-logs');
+	if (followLogsInterval) {
+		followLogsStop();
+		btn.textContent = 'Follow (Tail)';
+	} else {
+		fetchDockerLogs(id);
+		btn.textContent = 'Following...';
+		followLogsInterval = setInterval(() => {
+			fetchDockerLogs(id);
+		}, 2000);
+	}
+}
+
+function followLogsStop() {
+	if (followLogsInterval) {
+		clearInterval(followLogsInterval);
+		followLogsInterval = null;
+	}
+}
+
+function handleDockerLogs(data) {
+	if (data.id !== currentLogsContainerId) return;
+	
+	const logsOutput = document.getElementById('logs-output');
+	const existingLogs = logsOutput.value;
+	
+	if (followLogsInterval) {
+		logsOutput.value = data.logs;
+		logsOutput.scrollTop = logsOutput.scrollHeight;
+	} else {
+		logsOutput.value = data.logs;
 	}
 }
 
@@ -444,6 +517,11 @@ function connect() {
 
 	ws.onmessage = (event) => {
 		const data = JSON.parse(event.data);
+
+		if (data.type === 'dockerLogs') {
+			handleDockerLogs(data);
+			return;
+		}
 
 		if (!data.gpu) {
 			statusDiv.innerHTML = 'nvidia-smi failed to start';

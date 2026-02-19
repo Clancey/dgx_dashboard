@@ -79,6 +79,7 @@
                         <button class="start-btn">Start</button>
                         <button class="stop-btn">Stop</button>
                         <button class="restart-btn">Restart</button>
+                        <button class="logs-btn">Logs</button>
                     </td>
                     <td>
                         <span class="name"></span>
@@ -90,6 +91,21 @@
                     <td class="ports mono"></td>
                 </tr>
             </template>
+            <div id="docker-logs-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="logs-container-name"></h3>
+                        <button class="close-modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea id="logs-output" readonly></textarea>
+                        <div class="modal-footer">
+                            <button class="refresh-logs">Refresh</button>
+                            <button class="follow-logs">Follow (Tail)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
