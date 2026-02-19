@@ -86,11 +86,11 @@ class Server {
         try {
           client.add(jsonEncode(message));
         } catch (e) {
-          log('Error sending logs to client: $e');
+          print('Error sending logs to client: $e');
         }
       }
     } catch (e) {
-      log('Error getting Docker logs: $e');
+      print('Error getting Docker logs: $e');
     }
   }
 
