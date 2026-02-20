@@ -156,31 +156,56 @@ class DockerMonitor {
   // ---------------------------------------------------------------------------
   // Host command execution
   //
-  // The dashboard typically runs inside Docker. To access host systemd
-  // services (journalctl, systemctl) we need to execute commands on the host.
+  // The dashboard runs inside Docker. To access host systemd services
+  // (journalctl, systemctl) we run commands on the host.
   //
-  // Strategy (tried in order):
-  //   1. nsenter -t 1 ... (works when container has --pid=host)
-  //   2. docker run --rm --pid=host --privileged ... (works when the dashboard
-  //      has the docker socket mounted — which it always does for container
-  //      monitoring). Spawns a tiny helper container that uses nsenter.
-  //   3. Direct execution (works when running natively, not in Docker)
-  //
-  // The working method is cached after first successful call.
+  // Strategy (tried in order, result cached):
+  //   1. nsenter directly (needs --pid=host AND --privileged/CAP_SYS_ADMIN)
+  //   2. docker run a privileged helper container using our own image
+  //      (needs docker socket — always mounted for container monitoring)
+  //   3. Direct execution (for when dashboard runs natively, not in Docker)
   // ---------------------------------------------------------------------------
 
-  /// Cached strategy: 'nsenter', 'docker', 'direct', or null (not yet probed).
+  /// Cached strategy: 'nsenter', 'docker', 'direct', or null (not probed).
   String? _hostExecStrategy;
+
+  /// Cached image name for the 'docker' strategy helper container.
+  String? _ownImageName;
+
+  /// Detect our own Docker image name so we can use it for helper containers.
+  /// This avoids pulling external images and guarantees nsenter is available.
+  Future<String?> _getOwnImageName() async {
+    if (_ownImageName != null) return _ownImageName;
+
+    try {
+      // In Docker, hostname is the container ID.
+      final hostname = Platform.localHostname;
+      final result = await Process.run('docker', [
+        'inspect', '--format', '{{.Config.Image}}', hostname,
+      ]);
+      if (result.exitCode == 0) {
+        final image = result.stdout.toString().trim();
+        if (image.isNotEmpty) {
+          _ownImageName = image;
+          fine('Detected own image: $image');
+          return image;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback: try common name
+    _ownImageName = 'dgx_dashboard';
+    return _ownImageName;
+  }
 
   /// Run a command on the host and return its stdout.
   /// Returns null on failure.
   Future<String?> _runOnHost(List<String> command) async {
-    // If we already know what works, use it directly.
     if (_hostExecStrategy != null) {
       return _runOnHostWith(_hostExecStrategy!, command);
     }
 
-    // Probe strategies in order.
+    // Probe each strategy with a simple echo test.
     for (final strategy in ['nsenter', 'docker', 'direct']) {
       final result = await _runOnHostWith(strategy, ['echo', 'probe']);
       if (result != null && result.trim() == 'probe') {
@@ -199,18 +224,23 @@ class DockerMonitor {
       ProcessResult result;
       switch (strategy) {
         case 'nsenter':
+          // Direct nsenter — requires --pid=host AND --privileged on our
+          // container (or at least CAP_SYS_ADMIN).
           result = await Process.run('nsenter', [
             '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
             ...command,
           ]);
         case 'docker':
-          // Use a helper container with --pid=host to run nsenter.
-          // We use the host's own nsenter binary via /proc/1/root.
+          // Spawn a privileged helper container using our own image (which
+          // has nsenter from util-linux). The helper gets --pid=host and
+          // --privileged so nsenter works from inside it.
+          final image = await _getOwnImageName();
+          if (image == null) return null;
           result = await Process.run('docker', [
             'run', '--rm', '--pid=host', '--privileged',
-            'busybox:latest',
-            '/proc/1/root/usr/bin/nsenter', '-t', '1',
-            '-m', '-u', '-i', '-n', '-p', '--',
+            '--net=host', '--entrypoint=',
+            image,
+            'nsenter', '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
             ...command,
           ]);
         case 'direct':
@@ -222,15 +252,15 @@ class DockerMonitor {
       if (result.exitCode == 0) {
         return result.stdout.toString();
       }
-      // For systemctl is-active, exit code 3 means "inactive" which is valid.
+      // systemctl is-active returns exit code 3 for "inactive" — still valid.
       if (command.contains('is-active')) {
         return result.stdout.toString();
       }
-      fine('$strategy command failed (exit ${result.exitCode}): '
+      fine('$strategy failed (exit ${result.exitCode}): '
           '${result.stderr.toString().trim()}');
       return null;
     } catch (e) {
-      fine('$strategy strategy error: $e');
+      fine('$strategy error: $e');
       return null;
     }
   }
