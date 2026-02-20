@@ -80,6 +80,9 @@
                         <button class="stop-btn">Stop</button>
                         <button class="restart-btn">Restart</button>
                         <button class="logs-btn">Logs</button>
+                        <button class="svc-logs-btn">Service Logs</button>
+                        <button class="svc-start-btn">Start Service</button>
+                        <button class="svc-stop-btn">Stop Service</button>
                     </td>
                     <td>
                         <span class="name"></span>
@@ -102,6 +105,21 @@
                         <div class="modal-footer">
                             <button class="refresh-logs">Refresh</button>
                             <button class="follow-logs">Follow (Tail)</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="service-logs-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 id="svc-logs-container-name">Service Logs</h3>
+                        <button class="close-svc-modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea id="svc-logs-output" readonly></textarea>
+                        <div class="modal-footer">
+                            <button class="refresh-svc-logs">Refresh</button>
+                            <button class="follow-svc-logs">Follow (Tail)</button>
                         </div>
                     </div>
                 </div>

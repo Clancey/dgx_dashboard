@@ -153,6 +153,119 @@ class DockerMonitor {
     }
   }
 
+  /// Returns journalctl logs for a systemd service associated with a container.
+  ///
+  /// Uses nsenter to run journalctl on the host (requires --pid=host).
+  /// The service name is derived from the container name (e.g., 'vllm_node'
+  /// checks for 'vllm-*' services).
+  Future<String> getServiceLogs(String containerName,
+      {int lines = 200}) async {
+    if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(containerName)) {
+      return 'Invalid container name';
+    }
+
+    // Find the vllm service name by listing matching services on the host
+    final serviceName = await _findVllmService();
+    if (serviceName == null) {
+      return 'No vLLM systemd service found.\n\n'
+          'To create one, use:\n'
+          '  ./run-recipe.sh <recipe> --install-service';
+    }
+
+    try {
+      final result = await Process.run('nsenter', [
+        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+        'journalctl', '-u', serviceName, '-n', lines.toString(), '--no-pager',
+      ]);
+
+      if (result.exitCode == 0) {
+        final output = result.stdout.toString();
+        return output.isEmpty ? 'No logs available for $serviceName' : output;
+      } else {
+        return 'Error getting service logs: ${result.stderr}';
+      }
+    } catch (e) {
+      return 'Error getting service logs: $e\n\n'
+          'Ensure the dashboard is running with --pid=host';
+    }
+  }
+
+  /// Starts a vLLM systemd service on the host via nsenter.
+  Future<bool> startService() async {
+    final serviceName = await _findVllmService();
+    if (serviceName == null) return false;
+    return _runHostSystemctl('start', serviceName);
+  }
+
+  /// Stops a vLLM systemd service on the host via nsenter.
+  Future<bool> stopService() async {
+    final serviceName = await _findVllmService();
+    if (serviceName == null) return false;
+    return _runHostSystemctl('stop', serviceName);
+  }
+
+  /// Returns the status of a vLLM systemd service, or null if not found.
+  Future<String?> getServiceStatus() async {
+    final serviceName = await _findVllmService();
+    if (serviceName == null) return null;
+
+    try {
+      final result = await Process.run('nsenter', [
+        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+        'systemctl', 'is-active', serviceName,
+      ]);
+      return result.stdout.toString().trim();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Find the first vllm-* systemd service on the host.
+  Future<String?> _findVllmService() async {
+    try {
+      final result = await Process.run('nsenter', [
+        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+        'bash', '-c',
+        'ls /etc/systemd/system/vllm-*.service 2>/dev/null | head -1',
+      ]);
+
+      if (result.exitCode == 0) {
+        final path = result.stdout.toString().trim();
+        if (path.isNotEmpty) {
+          // Extract filename without .service extension path component
+          final filename = path.split('/').last;
+          return filename.replaceAll('.service', '');
+        }
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<bool> _runHostSystemctl(String command, String serviceName) async {
+    if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(serviceName)) {
+      warning('Rejected systemctl command due to invalid service name: $serviceName');
+      return false;
+    }
+
+    try {
+      fine('Executing nsenter systemctl $command $serviceName');
+      final result = await Process.run('nsenter', [
+        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+        'systemctl', command, serviceName,
+      ]);
+      fine('systemctl $command exited with code ${result.exitCode}');
+      if (result.exitCode != 0) {
+        warning('systemctl $command failed for $serviceName: ${result.stderr}');
+      }
+      return result.exitCode == 0;
+    } catch (e) {
+      error('Failed to run systemctl $command for $serviceName: $e');
+      return false;
+    }
+  }
+
   Future<bool> _runDockerCommand(String command, String id) async {
     // Ensure a valid container id (alphanumeric, underscore, hyphen, period).
     // Must be 1-255 chars, no path separators or shell metacharacters.

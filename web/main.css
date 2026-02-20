@@ -216,6 +216,33 @@ h1 {
 	color: #3182ce;
 }
 
+.svc-logs-btn {
+	color: #805ad5;
+}
+
+.svc-start-btn {
+	color: #009068;
+}
+
+.svc-stop-btn {
+	color: #c53030;
+}
+
+#svc-logs-output {
+	width: 100%;
+	height: 400px;
+	font-family: monospace;
+	font-size: 13px;
+	padding: 10px;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	resize: vertical;
+	background-color: #1e1e1e;
+	color: #d4d4d4;
+	white-space: pre-wrap;
+	word-wrap: break-word;
+}
+
 .actions button:disabled {
 	opacity: 0.5;
 	cursor: default;

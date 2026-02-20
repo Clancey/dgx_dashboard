@@ -94,6 +94,41 @@ class Server {
     }
   }
 
+  Future<void> _sendServiceLogs(WebSocket ws, String containerName) async {
+    try {
+      final logs = await _dockerMonitor.getServiceLogs(containerName);
+      final message = {
+        'type': 'serviceLogs',
+        'id': containerName,
+        'logs': logs,
+      };
+      try {
+        ws.add(jsonEncode(message));
+      } catch (e) {
+        print('Error sending service logs to client: $e');
+      }
+    } catch (e) {
+      print('Error getting service logs: $e');
+    }
+  }
+
+  Future<void> _sendServiceStatus(WebSocket ws) async {
+    try {
+      final status = await _dockerMonitor.getServiceStatus();
+      final message = {
+        'type': 'serviceStatus',
+        'status': status,
+      };
+      try {
+        ws.add(jsonEncode(message));
+      } catch (e) {
+        print('Error sending service status to client: $e');
+      }
+    } catch (e) {
+      print('Error getting service status: $e');
+    }
+  }
+
   void _fetchDockerContainers(bool wasTriggedByCommand) {
     if (_connectedClients.isEmpty) {
       _stopDockerPolling();
@@ -198,6 +233,21 @@ class Server {
             'id': final String id,
           }) {
             await _sendDockerLogs(ws, id);
+          } else if (message case {
+            'command': 'service-logs',
+            'id': final String id,
+          }) {
+            await _sendServiceLogs(ws, id);
+          } else if (message case {'command': 'service-start'}) {
+            await _dockerMonitor.startService();
+            await _sendServiceStatus(ws);
+            _fetchDockerContainers(true);
+          } else if (message case {'command': 'service-stop'}) {
+            await _dockerMonitor.stopService();
+            await _sendServiceStatus(ws);
+            _fetchDockerContainers(true);
+          } else if (message case {'command': 'service-status'}) {
+            await _sendServiceStatus(ws);
           }
         } catch (e) {
           warning('Error handling message:\n$data:\n$e');

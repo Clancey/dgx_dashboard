@@ -11,9 +11,10 @@ RUN dart compile exe bin/main.dart -o bin/dgx_dashboard
 # Switch to a minimal Alpine container for runtime.
 FROM alpine:latest
 
-# Install Docker CLI and glibc compatibility.
+# Install Docker CLI, glibc compatibility, and util-linux for nsenter.
 # gcompat is required for the glibc-linked Dart binary/nvidia-smi.
-RUN apk add --no-cache docker-cli gcompat
+# nsenter is used to run journalctl/systemctl on the host (requires --pid=host).
+RUN apk add --no-cache docker-cli gcompat util-linux
 
 WORKDIR /app
 

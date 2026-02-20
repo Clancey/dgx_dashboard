@@ -121,6 +121,32 @@ class MockDockerMonitor implements DockerMonitor {
   }
 
   @override
+  Future<String> getLogs(String id, {int tail = 100}) async {
+    return 'Mock docker logs for container $id';
+  }
+
+  @override
+  Stream<String> streamLogs(String id, {bool follow = false}) async* {
+    yield 'Mock stream log line';
+  }
+
+  @override
+  Future<String> getServiceLogs(String containerName, {int lines = 200}) async {
+    return 'Mock service logs for $containerName\n'
+        'vLLM server started on port 8000\n'
+        'Model loaded successfully';
+  }
+
+  @override
+  Future<bool> startService() async => true;
+
+  @override
+  Future<bool> stopService() async => true;
+
+  @override
+  Future<String?> getServiceStatus() async => 'active';
+
+  @override
   Future<bool> stopContainer(String id) async {
     final index = _containers.indexWhere((c) => c.id == id);
     if (index != -1) {

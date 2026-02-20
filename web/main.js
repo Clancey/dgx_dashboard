@@ -14,6 +14,11 @@ const pendingCommands = {};
 let currentLogsContainerId = null;
 let followLogsInterval = null;
 
+// Service logs state
+let currentSvcLogsContainerName = null;
+let followSvcLogsInterval = null;
+let vllmServiceStatus = null;
+
 const dockerActions = {
 	'docker-start': {
 		label: 'Start',
@@ -406,6 +411,40 @@ function updateDocker(data) {
 		logsBtn.style.display = 'inline-block';
 		logsBtn.onclick = () => showDockerLogs(container.id, container.names);
 
+		// Service buttons - only show for vLLM containers
+		const svcLogsBtn = clone.querySelector('.svc-logs-btn');
+		const svcStartBtn = clone.querySelector('.svc-start-btn');
+		const svcStopBtn = clone.querySelector('.svc-stop-btn');
+
+		if (isVllmContainer(container)) {
+			svcLogsBtn.style.display = 'inline-block';
+			svcLogsBtn.onclick = () => showServiceLogs(container.names);
+
+			// Show start/stop based on service status
+			const svcActive = vllmServiceStatus === 'active';
+			svcStartBtn.style.display = svcActive ? 'none' : 'inline-block';
+			svcStopBtn.style.display = svcActive ? 'inline-block' : 'none';
+
+			svcStartBtn.onclick = () => {
+				if (confirm('Start the vLLM systemd service?')) {
+					sendServiceCommand('service-start');
+					svcStartBtn.textContent = 'Starting...';
+					svcStartBtn.disabled = true;
+				}
+			};
+			svcStopBtn.onclick = () => {
+				if (confirm('Stop the vLLM systemd service?')) {
+					sendServiceCommand('service-stop');
+					svcStopBtn.textContent = 'Stopping...';
+					svcStopBtn.disabled = true;
+				}
+			};
+		} else {
+			svcLogsBtn.style.display = 'none';
+			svcStartBtn.style.display = 'none';
+			svcStopBtn.style.display = 'none';
+		}
+
 		tableBody.appendChild(clone);
 	});
 }
@@ -487,6 +526,83 @@ function handleDockerLogs(data) {
 	}
 }
 
+// --- Service Logs ---
+
+function showServiceLogs(containerName) {
+	currentSvcLogsContainerName = containerName;
+	document.getElementById('svc-logs-container-name').textContent = 'Service Logs';
+	document.getElementById('svc-logs-output').value = 'Loading service logs...';
+	document.getElementById('service-logs-modal').style.display = 'block';
+	fetchServiceLogs(containerName);
+
+	document.querySelector('.refresh-svc-logs').onclick = () => fetchServiceLogs(containerName);
+	document.querySelector('.follow-svc-logs').onclick = () => toggleFollowSvcLogs(containerName);
+	document.querySelector('.close-svc-modal').onclick = closeSvcModal;
+
+	window.onclick = (event) => {
+		if (event.target === document.getElementById('service-logs-modal')) {
+			closeSvcModal();
+		}
+	};
+}
+
+function closeSvcModal() {
+	document.getElementById('service-logs-modal').style.display = 'none';
+	currentSvcLogsContainerName = null;
+	followSvcLogsStop();
+}
+
+function fetchServiceLogs(containerName) {
+	if (ws && ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify({ command: 'service-logs', id: containerName }));
+	}
+}
+
+function toggleFollowSvcLogs(containerName) {
+	const btn = document.querySelector('.follow-svc-logs');
+	if (followSvcLogsInterval) {
+		followSvcLogsStop();
+		btn.textContent = 'Follow (Tail)';
+	} else {
+		fetchServiceLogs(containerName);
+		btn.textContent = 'Following...';
+		followSvcLogsInterval = setInterval(() => {
+			fetchServiceLogs(containerName);
+		}, 2000);
+	}
+}
+
+function followSvcLogsStop() {
+	if (followSvcLogsInterval) {
+		clearInterval(followSvcLogsInterval);
+		followSvcLogsInterval = null;
+	}
+}
+
+function handleServiceLogs(data) {
+	if (data.id !== currentSvcLogsContainerName) return;
+
+	const logsOutput = document.getElementById('svc-logs-output');
+	logsOutput.value = data.logs;
+	if (followSvcLogsInterval) {
+		logsOutput.scrollTop = logsOutput.scrollHeight;
+	}
+}
+
+function handleServiceStatus(data) {
+	vllmServiceStatus = data.status;
+}
+
+function sendServiceCommand(command) {
+	if (ws && ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify({ command }));
+	}
+}
+
+function isVllmContainer(container) {
+	return container.names === 'vllm_node' || container.names.startsWith('vllm');
+}
+
 const statusDiv = document.getElementById('status');
 const nvidiaSmiCrashWarningDiv = document.getElementById('nvidia-smi-crash-warning');
 const progressBar = document.getElementById('progress-bar');
@@ -513,6 +629,8 @@ function connect() {
 		statusDiv.style.color = '#4ec9b0';
 		// Begin progress bar animation assuming default interval of 5 seconds.
 		startProgressBar(5);
+		// Request initial service status
+		ws.send(JSON.stringify({ command: 'service-status' }));
 	};
 
 	ws.onmessage = (event) => {
@@ -520,6 +638,14 @@ function connect() {
 
 		if (data.type === 'dockerLogs') {
 			handleDockerLogs(data);
+			return;
+		}
+		if (data.type === 'serviceLogs') {
+			handleServiceLogs(data);
+			return;
+		}
+		if (data.type === 'serviceStatus') {
+			handleServiceStatus(data);
 			return;
 		}
 

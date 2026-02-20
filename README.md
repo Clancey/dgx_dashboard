@@ -23,6 +23,7 @@ Metrics update every 5s and are only collected while there is a connected client
 ```
 docker run -d --gpus all \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    --pid=host \
     -p 8080:8080 \
     --pull=always \
     --restart=unless-stopped \
@@ -31,6 +32,8 @@ docker run -d --gpus all \
 ```
 
 Including `-v /var/run/docker.sock:/var/run/docker.sock` is only required if you want to see Docker containers on the dashboard. Be aware that this allows the container to run `docker` commands so be sure you trust the image you are running. The images hosted on GHCR are built on GHCR and immutable so you are able to verify the complete source.
+
+Including `--pid=host` is only required if you want systemd service management features (viewing service logs, starting/stopping vLLM services). This allows the container to use `nsenter` to run `journalctl` and `systemctl` on the host.
 
 
 ### Updating the container
@@ -54,6 +57,7 @@ cd dgx_dashboard
 docker build -t dgx_dashboard .
 docker run -d --gpus all \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    --pid=host \
     -p 8080:8080 \
     --restart=unless-stopped \
     --name dashboard \
