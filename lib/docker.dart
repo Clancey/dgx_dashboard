@@ -153,18 +153,95 @@ class DockerMonitor {
     }
   }
 
-  /// Returns journalctl logs for a systemd service associated with a container.
-  ///
-  /// Uses nsenter to run journalctl on the host (requires --pid=host).
-  /// The service name is derived from the container name (e.g., 'vllm_node'
-  /// checks for 'vllm-*' services).
+  // ---------------------------------------------------------------------------
+  // Host command execution
+  //
+  // The dashboard typically runs inside Docker. To access host systemd
+  // services (journalctl, systemctl) we need to execute commands on the host.
+  //
+  // Strategy (tried in order):
+  //   1. nsenter -t 1 ... (works when container has --pid=host)
+  //   2. docker run --rm --pid=host --privileged ... (works when the dashboard
+  //      has the docker socket mounted — which it always does for container
+  //      monitoring). Spawns a tiny helper container that uses nsenter.
+  //   3. Direct execution (works when running natively, not in Docker)
+  //
+  // The working method is cached after first successful call.
+  // ---------------------------------------------------------------------------
+
+  /// Cached strategy: 'nsenter', 'docker', 'direct', or null (not yet probed).
+  String? _hostExecStrategy;
+
+  /// Run a command on the host and return its stdout.
+  /// Returns null on failure.
+  Future<String?> _runOnHost(List<String> command) async {
+    // If we already know what works, use it directly.
+    if (_hostExecStrategy != null) {
+      return _runOnHostWith(_hostExecStrategy!, command);
+    }
+
+    // Probe strategies in order.
+    for (final strategy in ['nsenter', 'docker', 'direct']) {
+      final result = await _runOnHostWith(strategy, ['echo', 'probe']);
+      if (result != null && result.trim() == 'probe') {
+        _hostExecStrategy = strategy;
+        info('Host command strategy: $strategy');
+        return _runOnHostWith(strategy, command);
+      }
+    }
+
+    warning('All host command strategies failed');
+    return null;
+  }
+
+  Future<String?> _runOnHostWith(String strategy, List<String> command) async {
+    try {
+      ProcessResult result;
+      switch (strategy) {
+        case 'nsenter':
+          result = await Process.run('nsenter', [
+            '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+            ...command,
+          ]);
+        case 'docker':
+          // Use a helper container with --pid=host to run nsenter.
+          // We use the host's own nsenter binary via /proc/1/root.
+          result = await Process.run('docker', [
+            'run', '--rm', '--pid=host', '--privileged',
+            'busybox:latest',
+            '/proc/1/root/usr/bin/nsenter', '-t', '1',
+            '-m', '-u', '-i', '-n', '-p', '--',
+            ...command,
+          ]);
+        case 'direct':
+          result = await Process.run(command.first, command.skip(1).toList());
+        default:
+          return null;
+      }
+
+      if (result.exitCode == 0) {
+        return result.stdout.toString();
+      }
+      // For systemctl is-active, exit code 3 means "inactive" which is valid.
+      if (command.contains('is-active')) {
+        return result.stdout.toString();
+      }
+      fine('$strategy command failed (exit ${result.exitCode}): '
+          '${result.stderr.toString().trim()}');
+      return null;
+    } catch (e) {
+      fine('$strategy strategy error: $e');
+      return null;
+    }
+  }
+
+  /// Returns journalctl logs for the vLLM systemd service.
   Future<String> getServiceLogs(String containerName,
       {int lines = 200}) async {
     if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(containerName)) {
       return 'Invalid container name';
     }
 
-    // Find the vllm service name by listing matching services on the host
     final serviceName = await _findVllmService();
     if (serviceName == null) {
       return 'No vLLM systemd service found.\n\n'
@@ -172,36 +249,34 @@ class DockerMonitor {
           '  ./run-recipe.sh <recipe> --install-service';
     }
 
-    try {
-      final result = await Process.run('nsenter', [
-        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
-        'journalctl', '-u', serviceName, '-n', lines.toString(), '--no-pager',
-      ]);
+    final output = await _runOnHost([
+      'journalctl', '-u', serviceName,
+      '-n', lines.toString(), '--no-pager',
+    ]);
 
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        return output.isEmpty ? 'No logs available for $serviceName' : output;
-      } else {
-        return 'Error getting service logs: ${result.stderr}';
-      }
-    } catch (e) {
-      return 'Error getting service logs: $e\n\n'
-          'Ensure the dashboard is running with --pid=host';
+    if (output == null) {
+      return 'Failed to read service logs.\n\n'
+          'Ensure the dashboard has the Docker socket mounted:\n'
+          '  -v /var/run/docker.sock:/var/run/docker.sock';
     }
+
+    return output.isEmpty ? 'No logs available for $serviceName' : output;
   }
 
-  /// Starts a vLLM systemd service on the host via nsenter.
+  /// Starts a vLLM systemd service on the host.
   Future<bool> startService() async {
     final serviceName = await _findVllmService();
     if (serviceName == null) return false;
-    return _runHostSystemctl('start', serviceName);
+    final result = await _runOnHost(['systemctl', 'start', serviceName]);
+    return result != null;
   }
 
-  /// Stops a vLLM systemd service on the host via nsenter.
+  /// Stops a vLLM systemd service on the host.
   Future<bool> stopService() async {
     final serviceName = await _findVllmService();
     if (serviceName == null) return false;
-    return _runHostSystemctl('stop', serviceName);
+    final result = await _runOnHost(['systemctl', 'stop', serviceName]);
+    return result != null;
   }
 
   /// Returns the status of a vLLM systemd service, or null if not found.
@@ -209,61 +284,25 @@ class DockerMonitor {
     final serviceName = await _findVllmService();
     if (serviceName == null) return null;
 
-    try {
-      final result = await Process.run('nsenter', [
-        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
-        'systemctl', 'is-active', serviceName,
-      ]);
-      return result.stdout.toString().trim();
-    } catch (e) {
-      return null;
-    }
+    final result = await _runOnHost(['systemctl', 'is-active', serviceName]);
+    return result?.trim();
   }
 
   /// Find the first vllm-* systemd service on the host.
   Future<String?> _findVllmService() async {
-    try {
-      final result = await Process.run('nsenter', [
-        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
-        'bash', '-c',
-        'ls /etc/systemd/system/vllm-*.service 2>/dev/null | head -1',
-      ]);
+    final result = await _runOnHost([
+      'bash', '-c',
+      'ls /etc/systemd/system/vllm-*.service 2>/dev/null | head -1',
+    ]);
 
-      if (result.exitCode == 0) {
-        final path = result.stdout.toString().trim();
-        if (path.isNotEmpty) {
-          // Extract filename without .service extension path component
-          final filename = path.split('/').last;
-          return filename.replaceAll('.service', '');
-        }
+    if (result != null) {
+      final path = result.trim();
+      if (path.isNotEmpty) {
+        final filename = path.split('/').last;
+        return filename.replaceAll('.service', '');
       }
-      return null;
-    } catch (e) {
-      return null;
     }
-  }
-
-  Future<bool> _runHostSystemctl(String command, String serviceName) async {
-    if (!RegExp(r'^[a-zA-Z0-9_.-]{1,255}$').hasMatch(serviceName)) {
-      warning('Rejected systemctl command due to invalid service name: $serviceName');
-      return false;
-    }
-
-    try {
-      fine('Executing nsenter systemctl $command $serviceName');
-      final result = await Process.run('nsenter', [
-        '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
-        'systemctl', command, serviceName,
-      ]);
-      fine('systemctl $command exited with code ${result.exitCode}');
-      if (result.exitCode != 0) {
-        warning('systemctl $command failed for $serviceName: ${result.stderr}');
-      }
-      return result.exitCode == 0;
-    } catch (e) {
-      error('Failed to run systemctl $command for $serviceName: $e');
-      return false;
-    }
+    return null;
   }
 
   Future<bool> _runDockerCommand(String command, String id) async {
