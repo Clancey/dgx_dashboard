@@ -205,14 +205,22 @@ class DockerMonitor {
       return _runOnHostWith(_hostExecStrategy!, command);
     }
 
-    // Probe each strategy with a simple echo test.
+    // Probe each strategy. The test must verify we're actually on the HOST
+    // (not just inside our container). We check for /etc/systemd which exists
+    // on the Ubuntu host but not inside our Alpine container.
     for (final strategy in ['nsenter', 'docker', 'direct']) {
-      final result = await _runOnHostWith(strategy, ['echo', 'probe']);
-      if (result != null && result.trim() == 'probe') {
+      info('Probing host command strategy: $strategy ...');
+      final result = await _runOnHostWith(
+        strategy,
+        ['sh', '-c', 'test -d /etc/systemd && echo host-ok'],
+      );
+      if (result != null && result.trim() == 'host-ok') {
         _hostExecStrategy = strategy;
         info('Host command strategy: $strategy');
         return _runOnHostWith(strategy, command);
       }
+      info('Probe failed for strategy: $strategy '
+          '(result: ${result?.trim() ?? 'null'})');
     }
 
     warning('All host command strategies failed');
@@ -234,13 +242,15 @@ class DockerMonitor {
           // Spawn a privileged helper container using our own image (which
           // has nsenter from util-linux). The helper gets --pid=host and
           // --privileged so nsenter works from inside it.
+          // We override the entrypoint to nsenter so the dashboard binary
+          // doesn't run.
           final image = await _getOwnImageName();
           if (image == null) return null;
           result = await Process.run('docker', [
-            'run', '--rm', '--pid=host', '--privileged',
-            '--net=host', '--entrypoint=',
+            'run', '--rm', '--pid=host', '--privileged', '--net=host',
+            '--entrypoint', 'nsenter',
             image,
-            'nsenter', '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
+            '-t', '1', '-m', '-u', '-i', '-n', '-p', '--',
             ...command,
           ]);
         case 'direct':
@@ -256,11 +266,11 @@ class DockerMonitor {
       if (command.contains('is-active')) {
         return result.stdout.toString();
       }
-      fine('$strategy failed (exit ${result.exitCode}): '
+      info('$strategy failed (exit ${result.exitCode}): '
           '${result.stderr.toString().trim()}');
       return null;
     } catch (e) {
-      fine('$strategy error: $e');
+      info('$strategy error: $e');
       return null;
     }
   }
